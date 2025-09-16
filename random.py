@@ -1,7 +1,8 @@
-# mt_streamlit_fixed.py
+# mt_streamlit_interactive_fixed.py
 import streamlit as st
 import time
 import numpy as np
+import plotly.express as px
 
 # --------------------------
 # MTMini – zjednodušený pseudonáhodný generátor
@@ -68,40 +69,39 @@ def invert_temper(y):
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("MTMini – krokové generovanie, predikcia a vizualizácia")
+st.title("MTMini – krokové generovanie, predikcia a 3D vizualizácia")
 
 st.markdown("""
-Tento program demonštruje pseudonáhodný generátor krok po kroku.
+Tento program demonštruje pseudonáhodný generátor krok po kroku:
 - Generovanie, twist a temperovanie bitov.
-- Vizualizácia rozptylu hodnôt.
+- Vizualizácia rozptylu hodnôt (histogram + 3D scatter).
 - Predikcia ďalšieho čísla po „prelomení“ a overenie správnosti.
 """)
 
 # Inicializácia generátora a stavov
 seed = st.number_input("Seed (celé číslo):", value=1, step=1)
-if "mt" not in st.session_state or st.session_state.seed != seed:
+if "mt" not in st.session_state or st.session_state.get("seed", None) != seed:
     st.session_state.mt = MTMini(seed)
     st.session_state.outputs = []
-    st.session_state.seed = seed
     st.session_state.generated_for_pred = []  # čísla použité na predikciu
+    st.session_state.seed = seed
 
 mt = st.session_state.mt
 outputs = st.session_state.outputs
 generated_for_pred = st.session_state.generated_for_pred
 
 # Slider rýchlosti krokovania
-speed = st.slider("Rýchlosť animácie (sekundy na krok)", 0.1, 2.0, 0.5, 0.1)
+speed = st.slider("Rýchlosť krokovania (sekundy na krok)", 0.1, 2.0, 0.5, 0.1)
 
 # --------------------------
-# Krokové generovanie čísla
+# Generovanie ďalšieho čísla
 # --------------------------
 if st.button("Generate next number"):
     next_val = mt.extract()
     outputs.append(next_val)
     st.text(f"Generated number: {next_val} -> {bits(next_val)}")
     
-    # Zobrazenie detailného výpočtu twistu (krok po kroku)
-    st.subheader("Detailný výpočet twistu (po kliknutí generovania):")
+    st.subheader("Detailný výpočet twistu:")
     details = mt.twist_detailed()
     for step in details:
         st.text(f"Index {step['i']}: s[i]={step['s_i']} ({bits(step['s_i'])}), "
@@ -113,16 +113,29 @@ if st.button("Generate next number"):
         time.sleep(speed)
 
 # --------------------------
-# Zobrazenie histogramu a 3D priestoru
+# Vizualizácia
 # --------------------------
 if outputs:
-    st.subheader("Všetky generované čísla a rozptyl:")
+    st.subheader("Všetky generované čísla:")
     st.text(outputs)
     st.bar_chart(np.array(outputs))
     
     if len(outputs) >=3:
-        st.subheader("Jednoduchá 3D textová vizualizácia:")
-        st.text(f"x={outputs[0]}, y={outputs[1]}, z={outputs[2]}")
+        st.subheader("Interaktívny 3D scatter (priestor hodnôt):")
+        df = np.array(outputs[:min(len(outputs), 100)])
+        x = df[0::3] if len(df) >=3 else df
+        y = df[1::3] if len(df) >=3 else np.zeros_like(x)
+        z = df[2::3] if len(df) >=3 else np.zeros_like(x)
+        scatter_data = np.column_stack((x,y,z))
+        fig = px.scatter_3d(
+            x=scatter_data[:,0],
+            y=scatter_data[:,1],
+            z=scatter_data[:,2],
+            color=scatter_data[:,0],
+            labels={'x':'X','y':'Y','z':'Z'},
+            title='Rozptyl pseudonáhodných hodnôt'
+        )
+        st.plotly_chart(fig)
 
 # --------------------------
 # Predikcia ďalšieho čísla po „prelomení“
@@ -131,7 +144,6 @@ if st.button("Predict next number (prelomenie)"):
     if len(outputs) < mt.n:
         st.warning(f"Na predikciu je potrebných minimálne {mt.n} výstupov.")
     else:
-        # Použiť len prvých n známych výstupov pred ďalším generovaním
         reconstructed_state = [invert_temper(val) for val in outputs[:mt.n]]
         st.subheader("Rekonštruovaný stav generátora:")
         st.text(reconstructed_state)
@@ -139,21 +151,24 @@ if st.button("Predict next number (prelomenie)"):
         mt_reconstructed = MTMini(seed=0)
         mt_reconstructed.state = reconstructed_state
         mt_reconstructed.n = len(reconstructed_state)
-        mt_reconstructed.index = 0  # začíname od rekonštruovaného stavu
+        mt_reconstructed.index = 0
 
         predicted_val = mt_reconstructed.extract()
         st.text(f"Predikované ďalšie číslo = {predicted_val} -> {bits(predicted_val)}")
 
-        # Overenie: skutočné číslo = ďalší extract z pôvodného generátora pred predikciou
-        next_val_actual = outputs[len(outputs)-1] if len(outputs) > mt.n else mt.extract()
-        if len(outputs) <= mt.n:
-            outputs.append(next_val_actual)  # doplníme do zoznamu, ak ešte nebolo
-        st.subheader("Overenie predikcie:")
-        st.text(f"Skutočné ďalšie číslo = {next_val_actual} -> {bits(next_val_actual)}")
-        st.success(f"Predikcia {'sedí' if predicted_val == next_val_actual else 'nesedí'}!")
+        # Overenie: ďalšie číslo z pôvodného generátora bez posunu
+        if len(outputs) >= mt.n:
+            mt_temp = MTMini(seed)
+            for val in outputs[:len(outputs)]:
+                mt_temp.extract()
+            next_val_actual = mt_temp.extract()
+            outputs.append(next_val_actual)
+            st.subheader("Overenie predikcie:")
+            st.text(f"Skutočné ďalšie číslo = {next_val_actual} -> {bits(next_val_actual)}")
+            st.success(f"Predikcia {'sedí' if predicted_val == next_val_actual else 'nesedí'}!")
 
 # --------------------------
-# Teoretické vysvetlenie rozptylu a pseudonáhodnosti
+# Teória pseudonáhodnosti a rozptylu
 # --------------------------
 st.subheader("Teória rozptylu a pseudonáhodnosti")
 st.markdown("""
