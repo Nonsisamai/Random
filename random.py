@@ -1,7 +1,12 @@
-# mt_streamlit_demo_animated.py
+# mt_streamlit_full_demo.py
 import streamlit as st
 import time
+import numpy as np
+import plotly.express as px
 
+# --------------------------
+# MTMini - zjednodušený Mersenne Twister
+# --------------------------
 class MTMini:
     def __init__(self, seed, n=4, w=8, m=2):
         self.n = n
@@ -46,12 +51,46 @@ class MTMini:
         self.index += 1
         return y
 
+# --------------------------
+# Pomocné funkcie
+# --------------------------
 def bits(x, w=8):
     return format(x, f'0{w}b')
 
-# Streamlit UI
-st.title("MTMini – animovaná vizualizácia bitov v twist kroku")
+def invert_temper(y):
+    y_inv = y
+    for _ in range(8):
+        y_inv = y ^ ((y_inv << 1) & 0xB8)
+    y_final = y_inv
+    for _ in range(8):
+        y_final = y_inv ^ (y_final >> 1)
+    return y_final & 0xFF
 
+def show_twist_step(step):
+    st.text(f"Index {step['i']}:")
+    st.text(f"s[i] = {step['s_i']} -> {bits(step['s_i'])}")
+    st.text(f"s[i+1] = {step['s_next']} -> {bits(step['s_next'])}")
+    st.text(f"upper = {step['upper']} -> {bits(step['upper'])}")
+    st.text(f"lower = {step['lower']} -> {bits(step['lower'])}")
+    st.text(f"y = upper|lower = {step['y']} -> {bits(step['y'])}")
+    st.text(f"y >> 1 = {step['yA']} -> {bits(step['yA'])}")
+    st.text(f"XOR const = {step['xor_const']} -> {bits(step['xor_const'])}")
+    st.text(f"new state = {step['new_val']} -> {bits(step['new_val'])}")
+    st.text("---")
+
+# --------------------------
+# Streamlit UI
+# --------------------------
+st.title("MTMini – vizuálna interaktívna náhoda a predikcia")
+
+st.markdown("""
+**Vysvetlenie "selsky":**  
+Mersenne Twister nie je úplne náhodný, ale mieša bity z počiatočného seedu.  
+Každý krok twistu premieša horné a dolné bity, posúva ich a robí XOR, aby čísla vyzerali náhodne.  
+3D graf ukáže, ako sa hodnoty rozptýlia v priestore – náhoda je tu len "pseudonáhodná".  
+""")
+
+# Inicializácia
 seed = st.number_input("Zadaj seed (celé číslo):", value=1, step=1)
 mt = MTMini(seed)
 
@@ -59,11 +98,11 @@ st.subheader("Počiatočný stav:")
 for i, val in enumerate(mt.state):
     st.text(f"s[{i}] = {val} -> {bits(val)}")
 
-if st.button("Spusti animovaný twist"):
+# Animácia twistu
+if st.button("Animovaný twist krok"):
     st.subheader("Animácia twistu bit po bite")
     placeholder = st.empty()
     details = mt.twist_detailed()
-    
     for step in details:
         msg = f"Index {step['i']}:\n"
         msg += f"s[i] = {step['s_i']} -> {bits(step['s_i'])}\n"
@@ -76,31 +115,39 @@ if st.button("Spusti animovaný twist"):
         msg += f"new state = {step['new_val']} -> {bits(step['new_val'])}\n"
         msg += "-------------------------"
         placeholder.text(msg)
-        time.sleep(1)  # pauza 1 sekunda pre animáciu
+        time.sleep(1)
 
-st.subheader("Generovanie výstupov:")
+# Generovanie výstupov
 num_outputs = st.slider("Koľko výstupov generovať?", 1, 8, 4)
 outputs = []
 for i in range(num_outputs):
     val = mt.extract()
     outputs.append(val)
-    st.text(f"Výstup {i}: {val} -> {bits(val)}")
+st.subheader("Výstupy:")
+st.text(outputs)
 
-if st.button("Prelomiť MT a predpovedať ďalšie číslo"):
-    st.subheader("Rekonštrukcia a predikcia")
-    def invert_temper(y):
-        y_inv = y
-        for _ in range(8):
-            y_inv = y ^ ((y_inv << 1) & 0xB8)
-        y_final = y_inv
-        for _ in range(8):
-            y_final = y_inv ^ (y_final >> 1)
-        return y_final & 0xFF
+# 3D scatter vizualizácia "náhodného priestoru"
+if len(outputs) >= 3:
+    st.subheader("3D vizualizácia náhodného priestoru")
+    x, y, z = outputs[0], outputs[1], outputs[2]
+    fig = px.scatter_3d(x=[x], y=[y], z=[z], color=[0], size=[10])
+    st.plotly_chart(fig)
+
+# Prelomenie a predikcia
+if st.button("Prelomiť MT a vizualizovať predikciu"):
+    st.subheader("Rekonštrukcia stavu a predikcia")
     reconstructed_state = [invert_temper(val) for val in outputs[:mt.n]]
-    for i, val in enumerate(reconstructed_state):
-        st.text(f"s[{i}] rekonštruované = {val} -> {bits(val)}")
+    st.text("Rekonštruovaný stav:")
+    st.text(reconstructed_state)
+
     mt_reconstructed = MTMini(seed=0)
     mt_reconstructed.state = reconstructed_state
     mt_reconstructed.index = len(outputs) % mt_reconstructed.n
     next_val = mt_reconstructed.extract()
     st.text(f"Predpovedané ďalšie číslo = {next_val} -> {bits(next_val)}")
+
+    st.markdown("""
+    **Vizualizácia pravdepodobnosti:**  
+    Ak generujeme ďalšie čísla, vidíme, že MT je deterministický – ďalšie číslo sa presne zhoduje s predikciou.  
+    3D scatter graf ukazuje, že hodnoty sa "rozptýlia" rovnomerne, takže vyzerá náhodne, ale je úplne predpovedateľné.
+    """)
