@@ -1,4 +1,4 @@
-# mt_streamlit_interactive_fixed2.py
+# mt_streamlit_prediction_fixed.py
 import streamlit as st
 import time
 import numpy as np
@@ -69,12 +69,12 @@ def invert_temper(y):
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("MTMini – krokové generovanie, predikcia a bezpečný 3D scatter")
+st.title("MTMini – krokové generovanie a správna predikcia")
 
 st.markdown("""
 - Generovanie, twist a temperovanie bitov.
 - Vizualizácia rozptylu hodnôt (histogram + 3D scatter).
-- Predikcia ďalšieho čísla po „prelomení“ a overenie správnosti.
+- Predikcia ďalšieho čísla po „prelomení“ – **pred generovaním ďalšieho čísla**.
 """)
 
 # Inicializácia
@@ -87,8 +87,34 @@ if "mt" not in st.session_state or st.session_state.get("seed", None) != seed:
 mt = st.session_state.mt
 outputs = st.session_state.outputs
 
-# Slider rýchlosti krokovania
 speed = st.slider("Rýchlosť krokovania (sekundy na krok)", 0.1, 2.0, 0.5, 0.1)
+
+# --------------------------
+# Predikcia ďalšieho čísla
+# --------------------------
+st.subheader("Predikcia ďalšieho čísla")
+if st.button("Predict next number (prelomenie)"):
+    if len(outputs) < mt.n:
+        st.warning(f"Na predikciu je potrebných minimálne {mt.n} výstupov.")
+    else:
+        reconstructed_state = [invert_temper(val) for val in outputs[-mt.n:]]
+        st.text(f"Rekonštruovaný stav: {reconstructed_state}")
+
+        mt_reconstructed = MTMini(seed=0)
+        mt_reconstructed.state = reconstructed_state
+        mt_reconstructed.n = len(reconstructed_state)
+        mt_reconstructed.index = 0
+
+        predicted_val = mt_reconstructed.extract()
+        st.success(f"Predikované číslo = {predicted_val} -> {bits(predicted_val)}")
+
+        # Overenie: dočasná kópia pôvodného generátora
+        mt_temp = MTMini(seed)
+        for val in outputs:
+            mt_temp.extract()
+        next_val_actual = mt_temp.extract()
+        st.text(f"Skutočné číslo = {next_val_actual} -> {bits(next_val_actual)}")
+        st.success(f"Predikcia {'sedí' if predicted_val == next_val_actual else 'nesedí'}!")
 
 # --------------------------
 # Generovanie čísla
@@ -110,14 +136,13 @@ if st.button("Generate next number"):
         time.sleep(speed)
 
 # --------------------------
-# Vizualizácia histogram + 3D scatter
+# Vizualizácia
 # --------------------------
 if outputs:
-    st.subheader("Generované čísla a histogram")
-    st.text(outputs)
+    st.subheader("Histogram generovaných čísel")
     st.bar_chart(np.array(outputs))
 
-    st.subheader("Bezpečný 3D scatter (rozptyl hodnôt)")
+    st.subheader("Bezpečný 3D scatter")
     df = np.array(outputs)
     if len(df) >= 3:
         n_points = len(df) // 3
@@ -143,36 +168,6 @@ if outputs:
         title='Rozptyl pseudonáhodných hodnôt'
     )
     st.plotly_chart(fig)
-
-# --------------------------
-# Predikcia ďalšieho čísla
-# --------------------------
-if st.button("Predict next number (prelomenie)"):
-    if len(outputs) < mt.n:
-        st.warning(f"Na predikciu je potrebných minimálne {mt.n} výstupov.")
-    else:
-        reconstructed_state = [invert_temper(val) for val in outputs[:mt.n]]
-        st.subheader("Rekonštruovaný stav generátora")
-        st.text(reconstructed_state)
-
-        mt_reconstructed = MTMini(seed=0)
-        mt_reconstructed.state = reconstructed_state
-        mt_reconstructed.n = len(reconstructed_state)
-        mt_reconstructed.index = 0
-
-        predicted_val = mt_reconstructed.extract()
-        st.text(f"Predikované číslo = {predicted_val} -> {bits(predicted_val)}")
-
-        # Overenie – ďalší extract z pôvodného generátora pred predikciou
-        mt_temp = MTMini(seed)
-        for val in outputs:
-            mt_temp.extract()
-        next_val_actual = mt_temp.extract()
-        outputs.append(next_val_actual)
-
-        st.subheader("Overenie predikcie")
-        st.text(f"Skutočné číslo = {next_val_actual} -> {bits(next_val_actual)}")
-        st.success(f"Predikcia {'sedí' if predicted_val == next_val_actual else 'nesedí'}!")
 
 # --------------------------
 # Teória pseudonáhodnosti
