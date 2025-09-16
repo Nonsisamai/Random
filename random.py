@@ -1,4 +1,4 @@
-# mt_streamlit_prediction_exact.py
+# mt_streamlit_break_predict.py
 import streamlit as st
 import time
 import numpy as np
@@ -60,12 +60,12 @@ def bits(x, w=8):
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("MTMini – krokové generovanie a 100 % presná predikcia")
+st.title("MTMini – prelomenie a 100 % presná predikcia")
 
 st.markdown("""
 - Generovanie, twist a temperovanie bitov.
 - Vizualizácia rozptylu hodnôt (histogram + 3D scatter).
-- Predikcia ďalšieho čísla – **100 % presná**, použitím aktuálneho stavu generátora.
+- Prelomenie generátora ukáže vnútorný stav, po ktorom môže byť predikcia presná.
 """)
 
 # Inicializácia
@@ -74,33 +74,52 @@ if "mt" not in st.session_state or st.session_state.get("seed", None) != seed:
     st.session_state.mt = MTMini(seed)
     st.session_state.outputs = []
     st.session_state.seed = seed
+    st.session_state.broken = False
+    st.session_state.broken_state = None
+    st.session_state.broken_index = None
 
 mt = st.session_state.mt
 outputs = st.session_state.outputs
+broken = st.session_state.broken
 
 speed = st.slider("Rýchlosť krokovania (sekundy na krok)", 0.1, 2.0, 0.5, 0.1)
 
 # --------------------------
-# Predikcia ďalšieho čísla – 100 % presná
+# Prelomenie generátora
+# --------------------------
+st.subheader("Prelomenie generátora")
+if st.button("Break generator"):
+    st.session_state.broken_state = mt.state.copy()
+    st.session_state.broken_index = mt.index
+    st.session_state.broken = True
+    st.success("Generátor prelomený – vnútorný stav uložený.")
+    st.text(f"State = {st.session_state.broken_state}")
+    st.text(f"Index = {st.session_state.broken_index}")
+
+# --------------------------
+# Predikcia ďalšieho čísla
 # --------------------------
 st.subheader("Predikcia ďalšieho čísla")
-if st.button("Predict next number (exact)"):
-    if not outputs:
-        st.warning("Najprv je potrebné vygenerovať aspoň jedno číslo.")
+if st.button("Predict next number"):
+    if not broken:
+        st.warning("Najprv je potrebné prelomiť generátor.")
     else:
-        # Použijeme presný aktuálny stav generátora
-        current_state = mt.state.copy()
-        current_index = mt.index
-
+        # Použijeme presný uložený stav generátora
         mt_temp = MTMini(seed)
-        mt_temp.state = current_state
-        mt_temp.index = current_index
+        mt_temp.state = st.session_state.broken_state.copy()
+        mt_temp.index = st.session_state.broken_index
         mt_temp.n = mt.n
 
         predicted_val = mt_temp.extract()
         st.success(f"Predikované číslo = {predicted_val} -> {bits(predicted_val)}")
 
-        st.info("Táto predikcia je 100 % presná, pretože sa použil aktuálny vnútorný stav generátora.")
+        # Overenie: dočasná kópia pôvodného generátora
+        mt_check = MTMini(seed)
+        for val in outputs:
+            mt_check.extract()
+        next_val_actual = mt_check.extract()
+        st.text(f"Skutočné číslo = {next_val_actual} -> {bits(next_val_actual)}")
+        st.success(f"Predikcia {'sedí' if predicted_val == next_val_actual else 'nesedí'}!")
 
 # --------------------------
 # Generovanie čísla
@@ -162,6 +181,7 @@ st.subheader("Teória pseudonáhodnosti a rozptylu")
 st.markdown("""
 - **Pseudonáhodnosť:** čísla vyzerajú náhodne, ale sú deterministické podľa seedu.
 - **Rozptyl hodnôt:** vizualizuje, ako sa výstupy rozkladajú v priestore hodnôt.
-- **Predikcia:** teraz je 100 % presná, pretože sa použil aktuálny vnútorný stav generátora.
+- **Prelomenie:** získa aktuálny vnútorný stav generátora.
+- **Predikcia:** po prelomení je 100 % presná.
 - Každý krok twistu kombinuje horné a dolné bity, posúva ich a robí XOR – matematický základ pseudonáhodnosti.
 """)
