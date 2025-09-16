@@ -1,8 +1,9 @@
-# mt_streamlit_full_demo.py
+# mt_streamlit_full_demo_matplotlib.py
 import streamlit as st
 import time
 import numpy as np
-import plotly.express as px
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 # --------------------------
 # MTMini - zjednodušený Mersenne Twister
@@ -81,13 +82,13 @@ def show_twist_step(step):
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("MTMini – vizuálna interaktívna náhoda a predikcia")
+st.title("MTMini – vizuálna interaktívna náhoda a predikcia (Matplotlib)")
 
 st.markdown("""
 **Vysvetlenie "selsky":**  
-Mersenne Twister nie je úplne náhodný, ale mieša bity z počiatočného seedu.  
-Každý krok twistu premieša horné a dolné bity, posúva ich a robí XOR, aby čísla vyzerali náhodne.  
-3D graf ukáže, ako sa hodnoty rozptýlia v priestore – náhoda je tu len "pseudonáhodná".  
+Mersenne Twister mieša bity z počiatočného seedu.  
+Každý krok twistu premieša horné a dolné bity, posúva ich a robí XOR.  
+3D graf ukáže, ako sa hodnoty rozptýlia v priestore – vyzerá náhodne, ale je deterministické.
 """)
 
 # Inicializácia
@@ -126,12 +127,16 @@ for i in range(num_outputs):
 st.subheader("Výstupy:")
 st.text(outputs)
 
-# 3D scatter vizualizácia "náhodného priestoru"
+# 3D scatter vizualizácia "náhodného priestoru" pomocou Matplotlib
 if len(outputs) >= 3:
     st.subheader("3D vizualizácia náhodného priestoru")
-    x, y, z = outputs[0], outputs[1], outputs[2]
-    fig = px.scatter_3d(x=[x], y=[y], z=[z], color=[0], size=[10])
-    st.plotly_chart(fig)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(outputs[0], outputs[1], outputs[2], c='r', s=50)
+    ax.set_xlabel('Output 0')
+    ax.set_ylabel('Output 1')
+    ax.set_zlabel('Output 2')
+    st.pyplot(fig)
 
 # Prelomenie a predikcia
 if st.button("Prelomiť MT a vizualizovať predikciu"):
