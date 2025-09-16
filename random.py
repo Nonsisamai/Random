@@ -1,22 +1,20 @@
-# mt_streamlit_full_demo_matplotlib.py
+# mt_streamlit_complete.py
 import streamlit as st
 import time
 import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # --------------------------
-# MTMini - zjednodušený Mersenne Twister
+# Zjednodušený Mersenne Twister (pseudonáhodný)
 # --------------------------
 class MTMini:
     def __init__(self, seed, n=4, w=8, m=2):
-        self.n = n
-        self.w = w
-        self.m = m
+        self.n = n          # počet stavových slov
+        self.w = w          # počet bitov v slove
+        self.m = m          # offset pri twist
         self.upper_mask = 0xF0
         self.lower_mask = 0x0F
         self.state = [(seed + i) % (1 << w) for i in range(n)]
-        self.index = n
+        self.index = n      # núti twist pri prvom extracte
 
     def twist_step(self, i):
         s_i = self.state[i]
@@ -47,6 +45,7 @@ class MTMini:
         if self.index >= self.n:
             self.twist_detailed()
         y = self.state[self.index]
+        # temperovanie
         y ^= y >> 1
         y ^= (y << 1) & 0xB8
         self.index += 1
@@ -59,6 +58,7 @@ def bits(x, w=8):
     return format(x, f'0{w}b')
 
 def invert_temper(y):
+    # Inverzia temperovania (len z pedagogického dôvodu)
     y_inv = y
     for _ in range(8):
         y_inv = y ^ ((y_inv << 1) & 0xB8)
@@ -67,92 +67,67 @@ def invert_temper(y):
         y_final = y_inv ^ (y_final >> 1)
     return y_final & 0xFF
 
-def show_twist_step(step):
-    st.text(f"Index {step['i']}:")
-    st.text(f"s[i] = {step['s_i']} -> {bits(step['s_i'])}")
-    st.text(f"s[i+1] = {step['s_next']} -> {bits(step['s_next'])}")
-    st.text(f"upper = {step['upper']} -> {bits(step['upper'])}")
-    st.text(f"lower = {step['lower']} -> {bits(step['lower'])}")
-    st.text(f"y = upper|lower = {step['y']} -> {bits(step['y'])}")
-    st.text(f"y >> 1 = {step['yA']} -> {bits(step['yA'])}")
-    st.text(f"XOR const = {step['xor_const']} -> {bits(step['xor_const'])}")
-    st.text(f"new state = {step['new_val']} -> {bits(step['new_val'])}")
-    st.text("---")
-
 # --------------------------
 # Streamlit UI
 # --------------------------
-st.title("MTMini – vizuálna interaktívna náhoda a predikcia (Matplotlib)")
+st.title("MTMini – pseudo-náhodnosť, vizualizácia a predikcia")
 
 st.markdown("""
-**Vysvetlenie "selsky":**  
-Mersenne Twister mieša bity z počiatočného seedu.  
-Každý krok twistu premieša horné a dolné bity, posúva ich a robí XOR.  
-3D graf ukáže, ako sa hodnoty rozptýlia v priestore – vyzerá náhodne, ale je deterministické.
+Tento program ukazuje, ako funguje pseudonáhodný generátor.  
+- Generujeme čísla, ktoré **vyzerajú náhodne**.  
+- Môžeme vizualizovať ich rozloženie **statisticky**.  
+- Ukážeme **logiku deterministického predikovania** ďalšieho čísla, ak poznáme stav.
 """)
 
-# Inicializácia
-seed = st.number_input("Zadaj seed (celé číslo):", value=1, step=1)
+seed = st.number_input("Seed (celé číslo):", value=1, step=1)
 mt = MTMini(seed)
 
 st.subheader("Počiatočný stav:")
 for i, val in enumerate(mt.state):
     st.text(f"s[{i}] = {val} -> {bits(val)}")
 
-# Animácia twistu
-if st.button("Animovaný twist krok"):
-    st.subheader("Animácia twistu bit po bite")
-    placeholder = st.empty()
-    details = mt.twist_detailed()
-    for step in details:
-        msg = f"Index {step['i']}:\n"
-        msg += f"s[i] = {step['s_i']} -> {bits(step['s_i'])}\n"
-        msg += f"s[i+1] = {step['s_next']} -> {bits(step['s_next'])}\n"
-        msg += f"upper = {step['upper']} -> {bits(step['upper'])}\n"
-        msg += f"lower = {step['lower']} -> {bits(step['lower'])}\n"
-        msg += f"y = upper|lower = {step['y']} -> {bits(step['y'])}\n"
-        msg += f"y >> 1 = {step['yA']} -> {bits(step['yA'])}\n"
-        msg += f"XOR const = {step['xor_const']} -> {bits(step['xor_const'])}\n"
-        msg += f"new state = {step['new_val']} -> {bits(step['new_val'])}\n"
-        msg += "-------------------------"
-        placeholder.text(msg)
-        time.sleep(1)
-
+# --------------------------
 # Generovanie výstupov
-num_outputs = st.slider("Koľko výstupov generovať?", 1, 8, 4)
+# --------------------------
+num_outputs = st.slider("Koľko výstupov generovať?", 3, 16, 6)
 outputs = []
 for i in range(num_outputs):
-    val = mt.extract()
-    outputs.append(val)
-st.subheader("Výstupy:")
+    outputs.append(mt.extract())
+
+st.subheader("Generované čísla:")
 st.text(outputs)
 
-# 3D scatter vizualizácia "náhodného priestoru" pomocou Matplotlib
-if len(outputs) >= 3:
-    st.subheader("3D vizualizácia náhodného priestoru")
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(outputs[0], outputs[1], outputs[2], c='r', s=50)
-    ax.set_xlabel('Output 0')
-    ax.set_ylabel('Output 1')
-    ax.set_zlabel('Output 2')
-    st.pyplot(fig)
+# --------------------------
+# Statistická vizualizácia
+# --------------------------
+st.subheader("Vizualizácia rozloženia (statistická)")
 
-# Prelomenie a predikcia
-if st.button("Prelomiť MT a vizualizovať predikciu"):
-    st.subheader("Rekonštrukcia stavu a predikcia")
+# Histogram
+st.bar_chart(np.array(outputs))
+
+# Textová 3D ilúzia (len pedagogicky)
+if len(outputs) >=3:
+    st.subheader("Jednoduchá 3D vizualizácia náhodného priestoru")
+    st.text(f"x={outputs[0]}, y={outputs[1]}, z={outputs[2]}")
+    st.text("-> ukazuje, že čísla sú rozptýlené, vyzerajú náhodne")
+
+# --------------------------
+# Predikcia / prelomenie
+# --------------------------
+if st.button("Prelomiť a predpovedať ďalšie číslo"):
+    st.subheader("Prelomenie PRNG a predikcia")
+    # rekonštrukcia stavu z prvých n výstupov
     reconstructed_state = [invert_temper(val) for val in outputs[:mt.n]]
     st.text("Rekonštruovaný stav:")
     st.text(reconstructed_state)
-
     mt_reconstructed = MTMini(seed=0)
     mt_reconstructed.state = reconstructed_state
     mt_reconstructed.index = len(outputs) % mt_reconstructed.n
     next_val = mt_reconstructed.extract()
     st.text(f"Predpovedané ďalšie číslo = {next_val} -> {bits(next_val)}")
-
     st.markdown("""
-    **Vizualizácia pravdepodobnosti:**  
-    Ak generujeme ďalšie čísla, vidíme, že MT je deterministický – ďalšie číslo sa presne zhoduje s predikciou.  
-    3D scatter graf ukazuje, že hodnoty sa "rozptýlia" rovnomerne, takže vyzerá náhodne, ale je úplne predpovedateľné.
+    **Vysvetlenie:**  
+    - PRNG je deterministický, takže ak poznáš stav, vieš predpovedať ďalšie číslo.  
+    - Vyzerá náhodne, ale v skutočnosti je to "pseudonáhoda".  
+    - Histogram a 3D text ukazujú, že čísla sú rovnomerne rozptýlené v priestore hodnôt.
     """)
